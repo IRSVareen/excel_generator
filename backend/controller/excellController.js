@@ -1,6 +1,69 @@
 const ExcelJS = require('exceljs');
 
 
+function setCellWithHighlight(sheet, cellRef, rawValue) {
+  const cell = sheet.getCell(cellRef);
+  const match = cellRef.match(/^([A-Z]+)(\d+)$/);
+  if (!match) throw new Error(`Invalid cell reference format: ${cellRef}`);
+
+  let finalValue = rawValue;
+  let highlight = false;
+
+  // Check for format like "1 (4.5678)"
+  if (typeof rawValue === 'string' && rawValue.includes('(')) {
+    const numberMatch = rawValue.match(/^(\d+)\s*\(([\d.]+)\)$/);
+    if (numberMatch) {
+      const prefix = parseInt(numberMatch[1]);
+      const num = parseFloat(numberMatch[2]);
+      const rounded = num.toFixed(2);
+
+      if (prefix === 0) {
+        finalValue = '-';
+      } else {
+        finalValue = `${prefix} (${rounded})`;
+        if (prefix > 1 || parseFloat(rounded) > 1) {
+          highlight = true;
+          if (highlight) {
+            // console.log('highlight:',cellRef, rawValue);
+            sheet.getCell(cellRef).fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFFFFF' }
+            };
+          }
+        }
+
+      }
+    } else {
+      finalValue = '-';
+    }
+  }
+
+  cell.value = finalValue;
+  cell.alignment = { horizontal: 'center' };
+}
+
+function setCellTime(sheet, cellRef, rawValue) {
+  const cell = sheet.getCell(cellRef);
+  const match = cellRef.match(/^([A-Z]+)(\d+)$/);
+  if (!match) throw new Error(`Invalid cell reference format: ${cellRef}`);
+
+  const isZeroTime = rawValue === '00:00:00';
+  const finalValue = isZeroTime ? '-' : rawValue;
+
+  cell.value = finalValue;
+  cell.alignment = { horizontal: 'center' };
+
+  if (!isZeroTime) {
+
+    sheet.getCell(cellRef).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFCCCC' }
+    };
+  }
+}
+
 async function generateExcel(jsonData) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Device Summary');
@@ -14,14 +77,9 @@ async function generateExcel(jsonData) {
     { width: 20 }, { width: 20 }, { width: 15 },
     { width: 20 }, { width: 20 }, { width: 15 }
   ];
-  const date = new Date()
-  const day = String(date.getDate()-1).padStart(2,'0')
-  const month = String(date.getMonth()+1).padStart(2,'0')
-  const year = String(date.getFullYear())
-  const today = `${day}/${month}/${year}`
-  console.log(today);
+
   // Row 1: Report Title
-  sheet.getCell('A1').value = `Report ${today}`;
+  sheet.getCell('A1').value = `Report of past 24 hours`;
   sheet.getCell('A1').font = { bold: true, size: 14 };
   sheet.getCell('A1').alignment = { vertical: 'middle', horizontal: 'center' };
 
@@ -68,69 +126,7 @@ async function generateExcel(jsonData) {
   // const rawData = await fs.readFile(path.join(__dirname, '../output.txt'), 'utf8');
   // const jsonData = JSON.parse(rawData);
 
-  function setCellWithHighlight(sheet, cellRef, rawValue) {
-    const cell = sheet.getCell(cellRef);
-    const match = cellRef.match(/^([A-Z]+)(\d+)$/);
-    if (!match) throw new Error(`Invalid cell reference format: ${cellRef}`);
-  
-    let finalValue = rawValue;
-    let highlight = false;
-  
-    // Check for format like "1 (4.5678)"
-    if (typeof rawValue === 'string' && rawValue.includes('(')) {
-      const numberMatch = rawValue.match(/^(\d+)\s*\(([\d.]+)\)$/);
-      if (numberMatch) {
-        const prefix = parseInt(numberMatch[1]);
-        const num = parseFloat(numberMatch[2]);         
-        const rounded = num.toFixed(2);                
-  
-        if (prefix === 0) {
-          finalValue = '-';
-        } else {
-          finalValue = `${prefix} (${rounded})`;
-          if (prefix > 1 || parseFloat(rounded) > 1) {
-            highlight = true;
-            if (highlight) {
-              // console.log('highlight:',cellRef, rawValue);
-              cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFFF0000' } 
-              };
-            }
-          }
-          
-        }
-      } else {
-        finalValue = '-';
-      }
-    }
-  
-    cell.value = finalValue;
-    cell.alignment = { horizontal: 'center' };
-  }
-  
-  function setCellTime(sheet,cellRef, rawValue){
-    const cell = sheet.getCell(cellRef);
-    const match = cellRef.match(/^([A-Z]+)(\d+)$/);
-    if (!match) throw new Error(`Invalid cell reference format: ${cellRef}`);
-  
-    const isZeroTime = rawValue === '00:00:00';
-    const finalValue = isZeroTime ? '-' : rawValue;
 
-    cell.value = finalValue;
-    cell.alignment = { horizontal: 'center' };
-
-    if (!isZeroTime) {
-      
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFFFCCCC' }
-      };
-    }
-    // console.log(`Set ${cellRef} to ${finalValue} with highlight: ${!isZeroTime}`);
-  }
 
 
   let currentRow = 4;
@@ -138,58 +134,58 @@ async function generateExcel(jsonData) {
     sheet.getCell(`A${currentRow}`).value = `${entry.orgName}`;
     sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'left' };
     sheet.getCell(`A${currentRow}`).font = { bold: true };
-    currentRow ++;
+    currentRow++;
     const machineData = entry.data
     // console.log(machineData);
-    machineData.forEach(deviceEntry=>{
-    
-    const deviceId = deviceEntry.deviceId;
-    // console.log(deviceId);
-    const deviceRunning = deviceEntry.data.device_running;
-    const sortingRunning = deviceEntry.data.sorting_running;
-    // console.log(deviceRunning, sortingRunning);
+    machineData.forEach(deviceEntry => {
 
-    sheet.getCell(`A${currentRow}`).value = deviceId;
-    sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
+      const deviceId = deviceEntry.deviceId;
+      // console.log(deviceId);
+      const deviceRunning = deviceEntry.data.device_running;
+      const sortingRunning = deviceEntry.data.sorting_running;
+      // console.log(deviceRunning, sortingRunning);
 
-    sheet.getCell(`B${currentRow}`).value = deviceRunning;
-    sheet.getCell(`B${currentRow}`).alignment = { horizontal: 'center' };
+      sheet.getCell(`A${currentRow}`).value = deviceId;
+      sheet.getCell(`A${currentRow}`).alignment = { horizontal: 'center' };
 
-    sheet.getCell(`C${currentRow}`).value = sortingRunning;
-    sheet.getCell(`C${currentRow}`).alignment = { horizontal: 'center' }
+      sheet.getCell(`B${currentRow}`).value = deviceRunning;
+      sheet.getCell(`B${currentRow}`).alignment = { horizontal: 'center' };
 
-    setCellWithHighlight(sheet, `D${currentRow}`,deviceEntry.data.cpufreq)
-    setCellTime(sheet, `E${currentRow}`, deviceEntry.data.cpu_time)
-    sheet.getCell(`F${currentRow}`).value = deviceEntry.data.maxCPUTemperatureThreshold
-    sheet.getCell(`F${currentRow}`).alignment = { horizontal: 'center' }
+      sheet.getCell(`C${currentRow}`).value = sortingRunning;
+      sheet.getCell(`C${currentRow}`).alignment = { horizontal: 'center' }
 
-    setCellWithHighlight(sheet, `G${currentRow}`, deviceEntry.data.gpufreq)
-    setCellTime(sheet, `H${currentRow}`, deviceEntry.data.gpu_time)
-    sheet.getCell(`I${currentRow}`).value = deviceEntry.data.maxGPUTemperatureThreshold
-    sheet.getCell(`I${currentRow}`).alignment = { horizontal: 'center' }
+      setCellWithHighlight(sheet, `D${currentRow}`, deviceEntry.data.cpufreq)
+      setCellTime(sheet, `E${currentRow}`, deviceEntry.data.cpu_time)
+      sheet.getCell(`F${currentRow}`).value = deviceEntry.data.maxCPUTemperatureThreshold
+      sheet.getCell(`F${currentRow}`).alignment = { horizontal: 'center' }
 
-    setCellWithHighlight(sheet, `J${currentRow}`, deviceEntry.data.panelfreq)
-    setCellTime(sheet, `K${currentRow}`, deviceEntry.data.panel_time)
-    sheet.getCell(`L${currentRow}`).value = deviceEntry.data.upperPanelThreshold
-    sheet.getCell(`L${currentRow}`).alignment = { horizontal: 'center' }
+      setCellWithHighlight(sheet, `G${currentRow}`, deviceEntry.data.gpufreq)
+      setCellTime(sheet, `H${currentRow}`, deviceEntry.data.gpu_time)
+      sheet.getCell(`I${currentRow}`).value = deviceEntry.data.maxGPUTemperatureThreshold
+      sheet.getCell(`I${currentRow}`).alignment = { horizontal: 'center' }
 
-    setCellWithHighlight(sheet, `M${currentRow}`, deviceEntry.data.visionfreq)
-    setCellTime(sheet, `N${currentRow}`, deviceEntry.data.vision_time)
-    sheet.getCell(`O${currentRow}`).value = deviceEntry.data.upperVisionPanelThreshold
-    sheet.getCell(`O${currentRow}`).alignment = { horizontal: 'center' }
+      setCellWithHighlight(sheet, `J${currentRow}`, deviceEntry.data.panelfreq)
+      setCellTime(sheet, `K${currentRow}`, deviceEntry.data.panel_time)
+      sheet.getCell(`L${currentRow}`).value = deviceEntry.data.upperPanelThreshold
+      sheet.getCell(`L${currentRow}`).alignment = { horizontal: 'center' }
 
-    setCellWithHighlight(sheet, `P${currentRow}`, deviceEntry.data.motorfreq);
-    setCellTime(sheet, `Q${currentRow}`, deviceEntry.data.ampere_time)
-    sheet.getCell(`R${currentRow}`).value = deviceEntry.data.motorAmpereThreshold
-    sheet.getCell(`R${currentRow}`).alignment = { horizontal: 'center' }
+      setCellWithHighlight(sheet, `M${currentRow}`, deviceEntry.data.visionfreq)
+      setCellTime(sheet, `N${currentRow}`, deviceEntry.data.vision_time)
+      sheet.getCell(`O${currentRow}`).value = deviceEntry.data.upperVisionPanelThreshold
+      sheet.getCell(`O${currentRow}`).alignment = { horizontal: 'center' }
 
-    setCellWithHighlight(sheet, `S${currentRow}`, deviceEntry.data.pressurefreq);
-    setCellTime(sheet, `T${currentRow}`, deviceEntry.data.air_pressure_time)
-    sheet.getCell(`U${currentRow}`).value = deviceEntry.data.airPressureLowerValueThreshold
-    sheet.getCell(`U${currentRow}`).alignment = { horizontal: 'center' }
+      setCellWithHighlight(sheet, `P${currentRow}`, deviceEntry.data.motorfreq);
+      setCellTime(sheet, `Q${currentRow}`, deviceEntry.data.ampere_time)
+      sheet.getCell(`R${currentRow}`).value = deviceEntry.data.motorAmpereThreshold
+      sheet.getCell(`R${currentRow}`).alignment = { horizontal: 'center' }
+
+      setCellWithHighlight(sheet, `S${currentRow}`, deviceEntry.data.pressurefreq);
+      setCellTime(sheet, `T${currentRow}`, deviceEntry.data.air_pressure_time)
+      sheet.getCell(`U${currentRow}`).value = deviceEntry.data.airPressureLowerValueThreshold
+      sheet.getCell(`U${currentRow}`).alignment = { horizontal: 'center' }
 
 
-    currentRow++;
+      currentRow++;
     })
     currentRow++;
   });
@@ -210,9 +206,14 @@ async function generateExcel(jsonData) {
       ySplit: 3
     }
   ];
+  const date = new Date()
+  const day = String(date.getDate() - 1).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const year = String(date.getFullYear())
+  const today = `${day}-${month}-${year}`
+  // console.log(today);
 
-  // Save the file
-  await workbook.xlsx.writeFile('Abnormality_Report.xlsx');
+  await workbook.xlsx.writeFile(`Abnormality_Report_${today}.xlsx`);
   console.log('Excel generated!');
 }
 
